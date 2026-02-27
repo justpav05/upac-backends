@@ -1,5 +1,10 @@
+use crate::errors::{BackendError, Result};
+
+use upac_core_lib::PackageMetadata;
+
+use std::path::PathBuf;
 use std::io::BufRead;
-use crate::error::{BackendError, Result};
+
 
 pub struct PkgInfo {
     pub name: String,
@@ -20,11 +25,17 @@ struct PkgInfoBuilder {
 impl From<PkgInfo> for PackageMetadata {
     fn from(info: PkgInfo) -> Self {
         PackageMetadata {
-            name: info.name,
-            version: info.version,
             description: info.description,
-            dependencies: info.dependencies,
+            maintainer: None,
+            homepage: None,
+            license: None,
         }
+    }
+}
+
+impl PkgInfo {
+    pub fn parse(reader: impl BufRead) -> Result<Self> {
+        PkgInfoBuilder::parse(reader)
     }
 }
 

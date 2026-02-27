@@ -1,9 +1,11 @@
 use crate::archive;
-use crate::info::{MtreeEntry, PkgInfo};
+use crate::errors::BackendError;
 
-use upac_core::backend::{Backend, ExtractedPackage, PackageMetadata, Result};
+use upac_core_lib::{Backend, ExtractedPackage, PackageMetadata};
 
 use std::path::Path;
+
+pub type Result<T> = std::result::Result<T, BackendError>;
 
 pub struct AlpmBackend {
     supported_formats: SupportedFormats,

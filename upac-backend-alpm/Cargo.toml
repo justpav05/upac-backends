@@ -7,5 +7,9 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-upac-core-lib = { git = "https://github.com/justpav05/upm", branch = "main" }
+upac-core-lib = { git = "https://github.com/justpav05/upac-core-lib.git", branch = "main" }
 nix = { version = "^0.28" }
+zstd = "0.13.3"
+flate2 = "1.1.9"
+tar = "0.4.44"
+xz2 = "0.1.7"
