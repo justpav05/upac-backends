@@ -4,23 +4,19 @@ use crate::info::{MtreeEntry, PkgInfo};
 
 use upac_core_lib::{ExtractedPackage, FileEntry};
 
-use std::io::{BufReader, Cursor, Read};
+use std::io::BufReader;
 use std::path::Path;
 
 pub fn read_pkginfo(path: &Path) -> Result<PkgInfo> {
     let mut archive = open_archive(path)?;
     let entry = find_entry(&mut archive, ".PKGINFO")?;
-    let mut content = Vec::new();
-    entry.read_to_end(&mut content)?;
-    PkgInfo::parse(Cursor::new(content))
+    PkgInfo::parse(BufReader::new(entry))
 }
 
 fn parse_mtree(path: &Path) -> Result<Vec<MtreeEntry>> {
     let mut archive = open_archive(path)?;
-    let mut entry = find_entry(&mut archive, ".MTREE")?;
-    let mut content = Vec::new();
-    entry.read_to_end(&mut content)?;
-    let content = decode_gzip(Cursor::new(content))?;
+    let entry = find_entry(&mut archive, ".MTREE")?;
+    let content = decode_gzip(entry)?;
 
     let entries = content
         .lines()
@@ -42,8 +38,9 @@ pub fn extract(path: &Path, temp_dir: &Path) -> Result<ExtractedPackage> {
     let mtree = parse_mtree(path)?;
 
     let mut archive = open_archive(path)?;
-    for mut entry in archive.entries()? {
-        let file_name = entry?.path()?.to_string_lossy().to_string();
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let file_name = entry.path()?.to_string_lossy().to_string();
 
         if is_meta_file(&file_name) {
             continue;

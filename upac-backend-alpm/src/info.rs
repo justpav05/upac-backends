@@ -14,14 +14,6 @@ pub struct PkgInfo {
     pub size: Option<u64>,
 }
 
-struct PkgInfoBuilder {
-    name: Option<String>,
-    version: Option<String>,
-    description: Option<String>,
-    dependencies: Vec<String>,
-    size: Option<u64>,
-}
-
 impl From<PkgInfo> for PackageMetadata {
     fn from(info: PkgInfo) -> Self {
         PackageMetadata {
@@ -35,7 +27,41 @@ impl From<PkgInfo> for PackageMetadata {
 
 impl PkgInfo {
     pub fn parse(reader: impl BufRead) -> Result<Self> {
-        PkgInfoBuilder::parse(reader)
+        let mut name = None;
+        let mut version = None;
+        let mut description = None;
+        let mut dependencies = Vec::new();
+        let mut size = None;
+
+        for line in reader.lines() {
+            let line = line?;
+            let line = line.trim();
+
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            let Some((key, value)) = line.split_once(" = ") else {
+                continue;
+            };
+
+            match key.trim() {
+                "pkgname" => name        = Some(value.trim().to_string()),
+                "pkgver"  => version     = Some(value.trim().to_string()),
+                "pkgdesc" => description = Some(value.trim().to_string()),
+                "depend"  => dependencies.push(value.trim().to_string()),
+                "size"    => size        = value.trim().parse::<u64>().ok(),
+                _         => {}
+            }
+        }
+
+        Ok(PkgInfo {
+            name: name.ok_or_else(|| BackendError::InvalidPackage("Missing pkgname".into()))?,
+            version: version.ok_or_else(|| BackendError::InvalidPackage("Missing pkgver".into()))?,
+            description,
+            dependencies,
+            size,
+        })
     }
 }
 
@@ -46,62 +72,36 @@ pub struct MtreeEntry {
     pub group: u32,
 }
 
-impl PkgInfoBuilder {
-    fn new() -> Self {
-        Self {
-            name: None,
-            version: None,
-            description: None,
-            dependencies: Vec::new(),
-            size: None,
-        }
-    }
+impl MtreeEntry {
+    pub fn parse(line: &str) -> Option<Self> {
+        let mut parts = line.split_whitespace();
+        let path = parts.next()?;
 
-    pub fn parse(reader: impl BufRead) -> Result<Self> {
-        let mut builder = PkgInfoBuilder::new();
+        let path = PathBuf::from(path.trim_start_matches("./"));
 
-        for line in reader.lines() {
-            builder.parse_line(&line?);
-        }
+        let mut permissions = 0o755u32;
+        let mut owner = 0u32;
+        let mut group = 0u32;
+        let mut is_dir = false;
 
-        builder.build()
-    }
+        for part in parts {
+            let Some((key, value)) = part.split_once('=') else {
+                continue;
+            };
 
-    fn parse_line(&mut self, line: &str) {
-        let line = line.trim();
-
-        if line.is_empty() || line.starts_with('#') {
-            return;
+            match key {
+                "mode" => permissions = u32::from_str_radix(value, 8).unwrap_or(0o755),
+                "uid"  => owner       = value.parse().unwrap_or(0),
+                "gid"  => group       = value.parse().unwrap_or(0),
+                "type" => is_dir      = value == "dir",
+                _      => {}
+            }
         }
 
-        let Some((key, value)) = line.split_once(" = ") else {
-            return;
-        };
-
-        self.apply(key.trim(), value.trim());
-    }
-
-    /// Применяет распarsенную пару ключ-значение
-    fn apply(&mut self, key: &str, value: &str) {
-        match key {
-            "pkgname" => self.name        = Some(value.to_string()),
-            "pkgver"  => self.version     = Some(value.to_string()),
-            "pkgdesc" => self.description = Some(value.to_string()),
-            "depend"  => self.dependencies.push(value.to_string()),
-            "size"    => self.size        = value.parse::<u64>().ok(),
-            _         => {}
+        if is_dir {
+            return None;
         }
-    }
 
-    fn build(self) -> Result<PkgInfo> {
-        Ok(PkgInfo {
-            name: self.name
-                .ok_or_else(|| BackendError::InvalidPackage("Missing pkgname".into()))?,
-            version: self.version
-                .ok_or_else(|| BackendError::InvalidPackage("Missing pkgver".into()))?,
-            description: self.description,
-            dependencies: self.dependencies,
-            size: self.size,
-        })
+        Some(MtreeEntry { path, permissions, owner, group })
     }
 }
